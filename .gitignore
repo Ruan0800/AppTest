@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# local machine SDK path (kept if android/ is committed after prebuild)
+android/local.properties

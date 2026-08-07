@@ -1,6 +1,7 @@
-import { useColorScheme as useColorSchemeCore } from 'react-native';
+import { useThemeMode } from '@/src/theme/ThemeContext';
 
-export const useColorScheme = () => {
-  const coreScheme = useColorSchemeCore();
-  return coreScheme === 'unspecified' ? 'light' : coreScheme;
-};
+/** Tema efetivo do app (padrão claro; controlado pelo toggle). */
+export function useColorScheme(): 'light' | 'dark' {
+  const { theme } = useThemeMode();
+  return theme;
+}
