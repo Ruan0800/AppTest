@@ -2,10 +2,12 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router/react-navigation';
 import type { ComponentProps } from 'react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -16,6 +18,7 @@ import {
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { Layout } from '@/constants/Layout';
 import { listContacts, listKeywords } from '@/src/db/database';
 import { requestAlertPermissions, triggerAlert } from '@/src/services/alertService';
 import {
@@ -35,6 +38,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
+  const pulse = useRef(new Animated.Value(0)).current;
 
   const [status, setStatus] = useState<ListeningStatus>(
     isListening() ? 'listening' : 'idle'
@@ -81,18 +85,45 @@ export default function HomeScreen() {
 
   const listeningOn = status === 'listening' || status === 'starting';
 
+  useEffect(() => {
+    if (!listeningOn) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 1200,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [listeningOn, pulse]);
+
   const statusMeta = useMemo(() => {
     if (status === 'listening') {
       return { title: 'Protegido', subtitle: 'Escuta ativa', dot: colors.tint };
     }
     if (status === 'starting') {
-      return { title: 'Iniciando…', subtitle: 'Preparando escuta', dot: '#93C5FD' };
+      return { title: 'Iniciando…', subtitle: 'Preparando escuta', dot: colors.starting };
     }
     if (status === 'error') {
       return {
         title: 'Atenção',
         subtitle: 'Tente ligar a escuta de novo',
-        dot: '#F87171',
+        dot: colors.danger,
       };
     }
     return {
@@ -100,7 +131,7 @@ export default function HomeScreen() {
       subtitle: 'Ligue a escuta para monitorar',
       dot: colors.muted,
     };
-  }, [status, colors.tint, colors.muted]);
+  }, [status, colors.tint, colors.muted, colors.starting, colors.danger]);
 
   const toggleListening = useCallback(async (value: boolean) => {
     setBusy(true);
@@ -131,7 +162,10 @@ export default function HomeScreen() {
   const onSos = useCallback(async () => {
     setSosBusy(true);
     try {
-      await requestAlertPermissions();
+      // Não espera diálogos de permissão aqui — isso travava o botão.
+      // Permissões já pedidas ao ligar a escuta; o alerta pede localização se faltar.
+      void requestAlertPermissions();
+
       const result = await triggerAlert({ trigger: 'manual', force: true });
       if (!result.triggered) {
         Alert.alert(
@@ -140,9 +174,6 @@ export default function HomeScreen() {
         );
         return;
       }
-
-      await refreshSummary();
-      await refreshLocation();
 
       const parts = [
         result.notified ? 'Notificação local enviada.' : 'Notificação local falhou.',
@@ -157,6 +188,10 @@ export default function HomeScreen() {
       ];
 
       Alert.alert('Alerta disparado', parts.join('\n'));
+
+      // Atualiza cards depois — não segura o spinner do SOS.
+      void refreshSummary();
+      void refreshLocation();
     } catch {
       Alert.alert('Erro', 'Não foi possível disparar o alerta.');
     } finally {
@@ -185,11 +220,27 @@ export default function HomeScreen() {
       ? location.placeName
       : 'Toque para obter a localização atual';
 
+  const pulseScale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+  const pulseOpacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.55, 0.15],
+  });
+
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
+      <View style={styles.brandBlock}>
+        <Text style={[styles.brand, { color: colors.tint }]}>Escuta Alertas</Text>
+        <Text style={[styles.brandTagline, { color: colors.muted }]}>
+          Monitoramento por voz com alerta rápido
+        </Text>
+      </View>
+
       <View style={styles.statusBlock}>
         <View style={styles.statusLeft}>
           <View style={styles.titleRow}>
@@ -208,39 +259,57 @@ export default function HomeScreen() {
           <Switch
             value={listeningOn}
             onValueChange={toggleListening}
-            trackColor={{ false: colors.border, true: '#BFDBFE' }}
-            thumbColor={listeningOn ? colors.tint : '#F8FAFC'}
+            trackColor={{ false: colors.border, true: colors.switchTrackOn }}
+            thumbColor={listeningOn ? colors.tint : colors.switchThumbOff}
+            accessibilityLabel="Ligar ou desligar escuta"
           />
         )}
       </View>
 
       <View style={styles.sosArea}>
-        <Pressable
-          onPress={onSos}
-          disabled={sosBusy}
-          style={({ pressed }) => [
-            styles.sosOuter,
-            {
-              backgroundColor:
-                colorScheme === 'dark' ? 'rgba(220,38,38,0.18)' : '#FEE2E2',
-              opacity: pressed || sosBusy ? 0.9 : 1,
-            },
-          ]}>
-          <View
-            style={[
-              styles.sosButton,
-              { backgroundColor: '#DC2626', shadowColor: '#DC2626' },
+        <View style={styles.sosStage}>
+          {listeningOn ? (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.sosPulse,
+                {
+                  backgroundColor: colors.sosRing,
+                  opacity: pulseOpacity,
+                  transform: [{ scale: pulseScale }],
+                },
+              ]}
+            />
+          ) : null}
+          <Pressable
+            onPress={onSos}
+            disabled={sosBusy}
+            accessibilityRole="button"
+            accessibilityLabel="Disparar alerta SOS"
+            accessibilityHint="Envia notificação e abre o WhatsApp dos contatos"
+            style={({ pressed }) => [
+              styles.sosOuter,
+              {
+                backgroundColor: colors.sosRing,
+                opacity: pressed || sosBusy ? 0.9 : 1,
+              },
             ]}>
-            {sosBusy ? (
-              <ActivityIndicator color="#fff" size="large" />
-            ) : (
-              <>
-                <Text style={styles.sosTitle}>SOS</Text>
-                <Text style={styles.sosSubtitle}>Toque para alertar</Text>
-              </>
-            )}
-          </View>
-        </Pressable>
+            <View
+              style={[
+                styles.sosButton,
+                { backgroundColor: colors.sos, shadowColor: colors.sos },
+              ]}>
+              {sosBusy ? (
+                <ActivityIndicator color="#fff" size="large" />
+              ) : (
+                <>
+                  <Text style={styles.sosTitle}>SOS</Text>
+                  <Text style={styles.sosSubtitle}>Toque para alertar</Text>
+                </>
+              )}
+            </View>
+          </Pressable>
+        </View>
         {listeningOn && !!transcript ? (
           <Text style={[styles.listeningText, { color: colors.muted }]} numberOfLines={1}>
             “{transcript}”
@@ -257,10 +326,11 @@ export default function HomeScreen() {
         title="Palavras"
         subtitle={`${keywords.length} cadastrada${keywords.length === 1 ? '' : 's'}`}
         body={keywordBody}
-        backgroundColor={colorScheme === 'dark' ? '#1A2233' : '#F7F8FA'}
+        backgroundColor={colors.card}
         titleColor={colors.tint}
         subtitleColor={colors.muted}
-        bodyColor={colorScheme === 'dark' ? '#E2E8F0' : '#1E293B'}
+        bodyColor={colors.text}
+        borderColor={colors.border}
         onPress={() => router.push('/keywords')}
       />
 
@@ -269,10 +339,11 @@ export default function HomeScreen() {
         title="Contatos"
         subtitle={`${contacts.length} cadastrado${contacts.length === 1 ? '' : 's'}`}
         body={contactsBody}
-        backgroundColor={colorScheme === 'dark' ? '#1A2233' : '#F7F8FA'}
+        backgroundColor={colors.card}
         titleColor={colors.tint}
         subtitleColor={colors.muted}
-        bodyColor={colorScheme === 'dark' ? '#E2E8F0' : '#1E293B'}
+        bodyColor={colors.text}
+        borderColor={colors.border}
         onPress={() => router.push('/contacts')}
       />
 
@@ -281,10 +352,11 @@ export default function HomeScreen() {
         title="Localização"
         subtitle={location ? 'Atual' : 'GPS'}
         body={locationBody}
-        backgroundColor={colorScheme === 'dark' ? '#1A2233' : '#F7F8FA'}
+        backgroundColor={colors.card}
         titleColor={colors.tint}
         subtitleColor={colors.muted}
-        bodyColor={colorScheme === 'dark' ? '#E2E8F0' : '#1E293B'}
+        bodyColor={colors.text}
+        borderColor={colors.border}
         onPress={() => void refreshLocation()}
       />
     </ScrollView>
@@ -300,6 +372,7 @@ function FeatureCard({
   titleColor,
   subtitleColor,
   bodyColor,
+  borderColor,
   onPress,
 }: {
   icon: ComponentProps<typeof FontAwesome>['name'];
@@ -310,16 +383,19 @@ function FeatureCard({
   titleColor: string;
   subtitleColor: string;
   bodyColor: string;
+  borderColor: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={title}
       style={({ pressed }) => [
         styles.cardWrap,
         { opacity: pressed ? 0.92 : 1 },
       ]}>
-      <View style={[styles.card, { backgroundColor }]}>
+      <View style={[styles.card, { backgroundColor, borderColor }]}>
         <View style={styles.cardHeader}>
           <View style={styles.cardTitleRow}>
             <View style={[styles.iconBadge, { backgroundColor: `${titleColor}18` }]}>
@@ -331,9 +407,10 @@ function FeatureCard({
                 {subtitle}
               </Text>
             </View>
+            <FontAwesome name="angle-right" size={18} color={subtitleColor} />
           </View>
         </View>
-        <View style={[styles.cardDivider, { backgroundColor: subtitleColor }]} />
+        <View style={[styles.cardDivider, { backgroundColor: borderColor }]} />
         <Text style={[styles.cardBody, { color: bodyColor }]}>{body}</Text>
       </View>
     </Pressable>
@@ -345,9 +422,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: 22,
-    paddingTop: 10,
+    paddingHorizontal: Layout.screenPadding,
+    paddingTop: 8,
     paddingBottom: 120,
+  },
+  brandBlock: {
+    marginBottom: 14,
+    gap: 2,
+  },
+  brand: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  brandTagline: {
+    fontSize: 13,
   },
   statusBlock: {
     flexDirection: 'row',
@@ -382,6 +471,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: 22,
+  },
+  sosStage: {
+    width: 210,
+    height: 210,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sosPulse: {
+    position: 'absolute',
+    width: 196,
+    height: 196,
+    borderRadius: 98,
   },
   sosOuter: {
     width: 196,
@@ -426,14 +527,15 @@ const styles = StyleSheet.create({
   },
   cardWrap: {
     marginBottom: 12,
-    borderRadius: 22,
+    borderRadius: Layout.radius,
     overflow: 'hidden',
   },
   card: {
     minHeight: 132,
-    borderRadius: 22,
-    paddingHorizontal: 20,
-    paddingVertical: 18,
+    borderRadius: Layout.radius,
+    borderWidth: 1,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     justifyContent: 'space-between',
     gap: 14,
   },
@@ -459,10 +561,10 @@ const styles = StyleSheet.create({
   cardDivider: {
     height: StyleSheet.hairlineWidth,
     width: '100%',
-    opacity: 0.45,
+    opacity: 0.9,
   },
   cardTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
   },
   cardSubtitle: {

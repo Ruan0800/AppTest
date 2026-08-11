@@ -55,6 +55,80 @@ export async function requestLocationPermission(): Promise<boolean> {
   return requested.granted;
 }
 
+function coordsOnly(
+  latitude: number,
+  longitude: number,
+  accuracy: number | null
+): AlertLocation {
+  return {
+    latitude,
+    longitude,
+    accuracy,
+    placeName: `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`,
+  };
+}
+
+async function hasLocationPermission(): Promise<boolean> {
+  const current = await Location.getForegroundPermissionsAsync();
+  return current.granted;
+}
+
+/**
+ * Localização rápida para o caminho crítico do alerta:
+ * - se já houver última posição, devolve na hora (sem esperar GPS novo)
+ * - só espera GPS fresco (com timeout) quando não há lastKnown
+ * - não faz reverse geocode
+ */
+export async function getQuickAlertLocation(
+  timeoutMs = 800
+): Promise<AlertLocation | null> {
+  try {
+    const granted = await hasLocationPermission();
+    if (!granted) {
+      // Só pede permissão se ainda não tiver — evita diálogo no caminho crítico
+      // quando já foi concedida.
+      const requested = await requestLocationPermission();
+      if (!requested) return null;
+    }
+
+    const last = await Location.getLastKnownPositionAsync().catch(() => null);
+    if (last) {
+      // Atualiza GPS em background para o próximo alerta (não bloqueia).
+      void Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      }).catch(() => null);
+
+      return coordsOnly(
+        last.coords.latitude,
+        last.coords.longitude,
+        last.coords.accuracy ?? null
+      );
+    }
+
+    const freshOrTimeout = await Promise.race([
+      Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      })
+        .then((position) =>
+          coordsOnly(
+            position.coords.latitude,
+            position.coords.longitude,
+            position.coords.accuracy ?? null
+          )
+        )
+        .catch(() => null),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+
+    return freshOrTimeout;
+  } catch {
+    return null;
+  }
+}
+
+/** Localização completa (GPS + nome do lugar). Usar fora do caminho crítico. */
 export async function getAlertLocation(): Promise<AlertLocation | null> {
   try {
     const granted = await requestLocationPermission();

@@ -50,7 +50,8 @@ export async function openWhatsAppForContacts(
   let opened = 0;
   let skipped = 0;
 
-  for (const contact of contacts) {
+  for (let i = 0; i < contacts.length; i += 1) {
+    const contact = contacts[i];
     const phone = normalizePhoneForWhatsApp(contact.phone);
     if (phone.length < 8) {
       skipped += 1;
@@ -61,15 +62,12 @@ export async function openWhatsAppForContacts(
     const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 
     try {
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        skipped += 1;
-        continue;
-      }
+      // openURL direto — canOpenURL no Android costuma atrasar o SOS.
       await Linking.openURL(url);
       opened += 1;
-      // Pequena pausa para o SO processar cada intent (vários contatos)
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      if (i < contacts.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
     } catch {
       skipped += 1;
     }

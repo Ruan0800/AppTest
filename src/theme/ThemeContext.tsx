@@ -49,13 +49,17 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((mode: ThemeMode) => {
     setThemeState(mode);
-    void AsyncStorage.setItem(STORAGE_KEY, mode);
+    void AsyncStorage.setItem(STORAGE_KEY, mode).catch(() => {
+      // Falha de storage não deve quebrar o app
+    });
   }, []);
 
   const toggleTheme = useCallback(() => {
     setThemeState((current) => {
       const next: ThemeMode = current === 'light' ? 'dark' : 'light';
-      void AsyncStorage.setItem(STORAGE_KEY, next);
+      void AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {
+        // Falha de storage não deve quebrar o app
+      });
       return next;
     });
   }, []);

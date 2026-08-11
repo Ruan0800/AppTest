@@ -1,17 +1,28 @@
 import { useFocusEffect } from 'expo-router/react-navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import Colors from '@/constants/Colors';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { IconButton } from '@/components/ui/IconButton';
+import { PhoneInput } from '@/components/ui/PhoneInput';
+import { TextField } from '@/components/ui/TextField';
 import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
+import { Layout } from '@/constants/Layout';
+import { MAX_CONTACTS } from '@/constants/limits';
+import {
+  buildFullPhone,
+  DEFAULT_PHONE_COUNTRY,
+  formatPhoneDisplay,
+} from '@/constants/phoneCountries';
 import {
   addContact,
   listContacts,
@@ -24,7 +35,10 @@ export default function ContactsScreen() {
   const colors = Colors[colorScheme];
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [dialCode, setDialCode] = useState(DEFAULT_PHONE_COUNTRY.dialCode);
+  const [localNumber, setLocalNumber] = useState('');
+  const nameRef = useRef<TextInput>(null);
+  const atLimit = contacts.length >= MAX_CONTACTS;
 
   const refresh = useCallback(async () => {
     setContacts(await listContacts());
@@ -37,26 +51,55 @@ export default function ContactsScreen() {
   );
 
   const onAdd = async () => {
-    const trimmedName = name.trim();
-    const trimmedPhone = phone.trim().replace(/\s+/g, '');
-
-    if (!trimmedName || !trimmedPhone) {
-      Alert.alert('Dados incompletos', 'Informe nome e telefone.');
-      return;
-    }
-
-    if (!/^\+?\d{8,15}$/.test(trimmedPhone)) {
+    if (contacts.length >= MAX_CONTACTS) {
       Alert.alert(
-        'Telefone inválido',
-        'Use apenas números, com DDI se possível (ex: 5511999999999).'
+        'Limite atingido',
+        `Você pode cadastrar no máximo ${MAX_CONTACTS} contatos de emergência. Remova um para adicionar outro.`
       );
       return;
     }
 
+    const trimmedName = name.trim();
+    const fullPhone = buildFullPhone(dialCode, localNumber);
+
+    if (!trimmedName || !localNumber.trim()) {
+      Alert.alert('Dados incompletos', 'Informe nome e telefone.');
+      return;
+    }
+
+    if (!dialCode.trim()) {
+      Alert.alert('DDI inválido', 'Selecione um país ou informe o código.');
+      return;
+    }
+
+    // BR: DDD (2) + número (8 ou 9). Outros: 6–12 dígitos locais.
+    const localDigits = localNumber.replace(/\D/g, '');
+    if (dialCode === '55') {
+      if (!/^\d{10,11}$/.test(localDigits)) {
+        Alert.alert(
+          'Telefone inválido',
+          'No Brasil, digite DDD + número (ex: 11999999999).'
+        );
+        return;
+      }
+    } else if (localDigits.length < 6 || localDigits.length > 12) {
+      Alert.alert(
+        'Telefone inválido',
+        'Digite o número local com DDD/área, sem o código do país.'
+      );
+      return;
+    }
+
+    if (fullPhone.length < 8 || fullPhone.length > 15) {
+      Alert.alert('Telefone inválido', 'Número completo fora do formato esperado.');
+      return;
+    }
+
     try {
-      await addContact(trimmedName, trimmedPhone);
+      await addContact(trimmedName, fullPhone);
       setName('');
-      setPhone('');
+      setLocalNumber('');
+      setDialCode(DEFAULT_PHONE_COUNTRY.dialCode);
       await refresh();
     } catch {
       Alert.alert('Erro', 'Não foi possível salvar o contato.');
@@ -79,58 +122,55 @@ export default function ContactsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.hint, { color: colors.muted }]}>
-        Contatos de emergência. No alerta, o WhatsApp abre com mensagem contendo
-        palavra/SOS, horário, localização e este contato. Use DDI+número (ex:
-        5511999999999). Você ainda precisa tocar em Enviar no WhatsApp.
-      </Text>
+      <View style={styles.hintRow}>
+        <Text style={[styles.hint, { color: colors.muted, flex: 1 }]}>
+          Contatos de emergência. No alerta, o WhatsApp abre com a mensagem pronta.
+        </Text>
+        <Text
+          style={[
+            styles.counter,
+            { color: atLimit ? colors.warning : colors.muted },
+          ]}>
+          {contacts.length}/{MAX_CONTACTS}
+        </Text>
+      </View>
 
-      <TextInput
+      <TextField
+        ref={nameRef}
+        label="Nome"
         value={name}
         onChangeText={setName}
-        placeholder="Nome"
-        placeholderTextColor={colors.muted}
-        style={[
-          styles.input,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            color: colors.text,
-          },
-        ]}
+        placeholder="Ex: Maria"
+        autoCapitalize="words"
+        editable={!atLimit}
       />
-      <TextInput
-        value={phone}
-        onChangeText={setPhone}
-        placeholder="Telefone (ex: 5511999999999)"
-        placeholderTextColor={colors.muted}
-        keyboardType="phone-pad"
-        style={[
-          styles.input,
-          {
-            backgroundColor: colors.card,
-            borderColor: colors.border,
-            color: colors.text,
-          },
-        ]}
+
+      <PhoneInput
+        dialCode={dialCode}
+        localNumber={localNumber}
+        onDialCodeChange={setDialCode}
+        onLocalNumberChange={setLocalNumber}
       />
-      <Pressable
+
+      <Button
+        label="Adicionar contato"
         onPress={onAdd}
-        style={({ pressed }) => [
-          styles.addButton,
-          { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-        ]}>
-        <Text style={styles.addButtonText}>Adicionar contato</Text>
-      </Pressable>
+        disabled={atLimit}
+        accessibilityLabel="Adicionar contato de emergência"
+      />
 
       <FlatList
         data={contacts}
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
-          <Text style={{ color: colors.muted, textAlign: 'center' }}>
-            Nenhum contato cadastrado.
-          </Text>
+          <EmptyState
+            icon="users"
+            title="Nenhum contato ainda"
+            description="Cadastre quem deve receber o alerta pelo WhatsApp."
+            actionLabel=""
+            onAction={() => nameRef.current?.focus()}
+          />
         }
         renderItem={({ item }) => (
           <View
@@ -138,13 +178,18 @@ export default function ContactsScreen() {
               styles.row,
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}>
-            <View style={{ flex: 1 }}>
+            <View style={styles.rowText}>
               <Text style={[styles.name, { color: colors.text }]}>{item.name}</Text>
-              <Text style={{ color: colors.muted }}>{item.phone}</Text>
+              <Text style={{ color: colors.muted }}>
+                {formatPhoneDisplay(item.phone)}
+              </Text>
             </View>
-            <Pressable onPress={() => onRemove(item)}>
-              <Text style={{ color: colors.destructive, fontWeight: '600' }}>Remover</Text>
-            </Pressable>
+            <IconButton
+              icon="trash-o"
+              tone="destructive"
+              accessibilityLabel={`Remover contato ${item.name}`}
+              onPress={() => onRemove(item)}
+            />
           </View>
         )}
       />
@@ -153,30 +198,35 @@ export default function ContactsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 10 },
-  hint: { fontSize: 13, lineHeight: 18, marginBottom: 4 },
-  input: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
+  container: {
+    flex: 1,
+    padding: Layout.screenPadding,
+    gap: Layout.gap,
   },
-  addButton: {
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
   },
-  addButtonText: { color: '#fff', fontWeight: '700' },
-  list: { gap: 8, paddingBottom: 24, paddingTop: 8 },
+  hint: { fontSize: 13, lineHeight: 18 },
+  counter: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  list: { gap: 8, paddingBottom: 24, paddingTop: 4, flexGrow: 1 },
   row: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: Layout.radius,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
   },
-  name: { fontSize: 16, fontWeight: '600', marginBottom: 2 },
+  rowText: {
+    flex: 1,
+    gap: 2,
+  },
+  name: { fontSize: 16, fontWeight: '600' },
 });

@@ -1,17 +1,22 @@
 import { useFocusEffect } from 'expo-router/react-navigation';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 
-import Colors from '@/constants/Colors';
+import { Button } from '@/components/ui/Button';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { IconButton } from '@/components/ui/IconButton';
+import { TextField } from '@/components/ui/TextField';
 import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
+import { Layout } from '@/constants/Layout';
+import { MAX_KEYWORDS } from '@/constants/limits';
 import {
   addKeyword,
   listKeywords,
@@ -25,6 +30,8 @@ export default function KeywordsScreen() {
   const colors = Colors[colorScheme];
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [word, setWord] = useState('');
+  const inputRef = useRef<TextInput>(null);
+  const atLimit = keywords.length >= MAX_KEYWORDS;
 
   const refresh = useCallback(async () => {
     setKeywords(await listKeywords());
@@ -37,6 +44,14 @@ export default function KeywordsScreen() {
   );
 
   const onAdd = async () => {
+    if (keywords.length >= MAX_KEYWORDS) {
+      Alert.alert(
+        'Limite atingido',
+        `Você pode cadastrar no máximo ${MAX_KEYWORDS} palavras-chave. Remova uma para adicionar outra.`
+      );
+      return;
+    }
+
     const trimmed = word.trim();
     if (!trimmed) {
       Alert.alert('Palavra inválida', 'Digite uma palavra-chave.');
@@ -75,36 +90,40 @@ export default function KeywordsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.hint, { color: colors.muted }]}>
-        Quando o app ouvir uma destas palavras, um alerta será disparado.
-      </Text>
+      <View style={styles.hintRow}>
+        <Text style={[styles.hint, { color: colors.muted, flex: 1 }]}>
+          Quando o app ouvir uma destas palavras, um alerta será disparado.
+        </Text>
+        <Text
+          style={[
+            styles.counter,
+            { color: atLimit ? colors.warning : colors.muted },
+          ]}>
+          {keywords.length}/{MAX_KEYWORDS}
+        </Text>
+      </View>
 
       <View style={styles.form}>
-        <TextInput
-          value={word}
-          onChangeText={setWord}
-          placeholder="Ex: socorro"
-          placeholderTextColor={colors.muted}
-          autoCapitalize="none"
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.card,
-              borderColor: colors.border,
-              color: colors.text,
-            },
-          ]}
-          onSubmitEditing={onAdd}
-          returnKeyType="done"
-        />
-        <Pressable
+        <View style={styles.inputGrow}>
+          <TextField
+            ref={inputRef}
+            label="Palavra-chave"
+            value={word}
+            onChangeText={setWord}
+            placeholder="Ex: socorro"
+            autoCapitalize="none"
+            onSubmitEditing={onAdd}
+            returnKeyType="done"
+            editable={!atLimit}
+          />
+        </View>
+        <Button
+          label="Adicionar"
           onPress={onAdd}
-          style={({ pressed }) => [
-            styles.addButton,
-            { backgroundColor: colors.tint, opacity: pressed ? 0.85 : 1 },
-          ]}>
-          <Text style={styles.addButtonText}>Adicionar</Text>
-        </Pressable>
+          disabled={atLimit}
+          style={styles.addButton}
+          accessibilityLabel="Adicionar palavra-chave"
+        />
       </View>
 
       <FlatList
@@ -112,9 +131,13 @@ export default function KeywordsScreen() {
         keyExtractor={(item) => String(item.id)}
         contentContainerStyle={styles.list}
         ListEmptyComponent={
-          <Text style={{ color: colors.muted, textAlign: 'center' }}>
-            Nenhuma palavra-chave cadastrada.
-          </Text>
+          <EmptyState
+            icon="microphone"
+            title="Nenhuma palavra ainda"
+            description="Cadastre palavras que, ao serem ouvidas, disparam o alerta."
+            actionLabel=""
+            onAction={() => inputRef.current?.focus()}
+          />
         }
         renderItem={({ item }) => (
           <View
@@ -123,9 +146,12 @@ export default function KeywordsScreen() {
               { backgroundColor: colors.card, borderColor: colors.border },
             ]}>
             <Text style={[styles.word, { color: colors.text }]}>{item.word}</Text>
-            <Pressable onPress={() => onRemove(item)}>
-              <Text style={{ color: colors.destructive, fontWeight: '600' }}>Remover</Text>
-            </Pressable>
+            <IconButton
+              icon="trash-o"
+              tone="destructive"
+              accessibilityLabel={`Remover palavra ${item.word}`}
+              onPress={() => onRemove(item)}
+            />
           </View>
         )}
       />
@@ -134,32 +160,44 @@ export default function KeywordsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, gap: 12 },
-  hint: { fontSize: 13, lineHeight: 18 },
-  form: { flexDirection: 'row', gap: 8 },
-  input: {
+  container: {
     flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
+    padding: Layout.screenPadding,
+    gap: Layout.gap,
+  },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  hint: { fontSize: 13, lineHeight: 18 },
+  counter: {
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  form: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  inputGrow: {
+    flex: 1,
   },
   addButton: {
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    justifyContent: 'center',
+    paddingHorizontal: 14,
+    minWidth: 110,
   },
-  addButtonText: { color: '#fff', fontWeight: '700' },
-  list: { gap: 8, paddingBottom: 24 },
+  list: { gap: 8, paddingBottom: 24, flexGrow: 1 },
   row: {
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: Layout.radius,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
   },
-  word: { fontSize: 16, fontWeight: '600' },
+  word: { fontSize: 16, fontWeight: '600', flex: 1 },
 });
