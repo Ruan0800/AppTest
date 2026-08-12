@@ -18,6 +18,8 @@ function withNotifeeMicrophone(config) {
     'android.permission.FOREGROUND_SERVICE_MICROPHONE',
     'android.permission.WAKE_LOCK',
     'android.permission.VIBRATE',
+    'android.permission.USE_FULL_SCREEN_INTENT',
+    'android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS',
   ]);
 
   config = withProjectBuildGradle(config, (config) => {

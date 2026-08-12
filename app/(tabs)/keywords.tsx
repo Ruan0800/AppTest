@@ -23,6 +23,7 @@ import {
   removeKeyword,
 } from '@/src/db/database';
 import { normalizeText } from '@/src/services/keywordMatcher';
+import { invalidateKeywordCache } from '@/src/services/listeningService';
 import type { Keyword } from '@/src/types';
 
 export default function KeywordsScreen() {
@@ -67,6 +68,7 @@ export default function KeywordsScreen() {
 
     try {
       await addKeyword(trimmed.toLowerCase());
+      invalidateKeywordCache();
       setWord('');
       await refresh();
     } catch {
@@ -82,6 +84,7 @@ export default function KeywordsScreen() {
         style: 'destructive',
         onPress: async () => {
           await removeKeyword(item.id);
+          invalidateKeywordCache();
           await refresh();
         },
       },

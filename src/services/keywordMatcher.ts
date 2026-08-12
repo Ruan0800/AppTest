@@ -21,11 +21,8 @@ export function findMatchingKeyword(
     const normalizedKeyword = normalizeText(keyword);
     if (!normalizedKeyword) continue;
 
-    // Match por palavra inteira ou substring clara no transcript
-    if (
-      normalizedTranscript.includes(` ${normalizedKeyword} `) ||
-      normalizedTranscript.includes(normalizedKeyword)
-    ) {
+    // Só palavra inteira — evita "perigo" dentro de "perigosamente".
+    if (normalizedTranscript.includes(` ${normalizedKeyword} `)) {
       return keyword;
     }
   }

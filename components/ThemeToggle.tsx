@@ -4,7 +4,11 @@ import { Pressable, StyleSheet } from 'react-native';
 import Colors from '@/constants/Colors';
 import { useThemeMode } from '@/src/theme/ThemeContext';
 
-export function ThemeToggle() {
+type Props = {
+  color?: string;
+};
+
+export function ThemeToggle({ color }: Props) {
   const { theme, toggleTheme } = useThemeMode();
   const colors = Colors[theme];
 
@@ -20,7 +24,7 @@ export function ThemeToggle() {
       <FontAwesome
         name={theme === 'light' ? 'moon-o' : 'sun-o'}
         size={20}
-        color={colors.text}
+        color={color ?? colors.text}
       />
     </Pressable>
   );

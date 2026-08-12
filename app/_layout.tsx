@@ -13,7 +13,11 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors';
+import { registerAlertNotificationHandlers } from '@/src/services/alertNotificationHandlers';
 import { registerForegroundService } from '@/src/services/foregroundService';
+import { flushPendingWhatsApp } from '@/src/services/pendingWhatsApp';
+import { loadAppSettings } from '@/src/settings/appSettings';
 import { AppThemeProvider } from '@/src/theme/ThemeContext';
 
 export { ErrorBoundary } from 'expo-router';
@@ -24,6 +28,7 @@ export const unstable_settings = {
 
 SplashScreen.preventAutoHideAsync();
 registerForegroundService();
+registerAlertNotificationHandlers();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
@@ -38,6 +43,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
+      void loadAppSettings();
+      // Se um alerta ficou pendente com o app em background, tenta abrir o WA.
+      void flushPendingWhatsApp();
     }
   }, [loaded]);
 
@@ -56,12 +64,24 @@ export default function RootLayout() {
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme];
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style="light" />
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="settings"
+          options={{
+            title: 'Configurações',
+            headerStyle: { backgroundColor: Colors.light.tint },
+            headerShadowVisible: false,
+            headerTintColor: '#FFFFFF',
+            headerTitleStyle: { fontWeight: '700', color: '#FFFFFF' },
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );

@@ -43,29 +43,39 @@ export function buildAlertMessage(
   ].join('\n');
 }
 
+export function buildWhatsAppUrl(
+  contact: Contact,
+  payload: WhatsAppAlertPayload
+): string | null {
+  const phone = normalizePhoneForWhatsApp(contact.phone);
+  if (phone.length < 8) return null;
+
+  const text = buildAlertMessage(payload, contact);
+  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+}
+
+export function buildWhatsAppUrls(
+  contacts: Contact[],
+  payload: WhatsAppAlertPayload
+): string[] {
+  return contacts
+    .map((contact) => buildWhatsAppUrl(contact, payload))
+    .filter((url): url is string => !!url);
+}
+
 export async function openWhatsAppForContacts(
   contacts: Contact[],
   payload: WhatsAppAlertPayload
-): Promise<{ opened: number; skipped: number }> {
+): Promise<{ opened: number; skipped: number; urls: string[] }> {
+  const urls = buildWhatsAppUrls(contacts, payload);
   let opened = 0;
-  let skipped = 0;
+  let skipped = contacts.length - urls.length;
 
-  for (let i = 0; i < contacts.length; i += 1) {
-    const contact = contacts[i];
-    const phone = normalizePhoneForWhatsApp(contact.phone);
-    if (phone.length < 8) {
-      skipped += 1;
-      continue;
-    }
-
-    const text = buildAlertMessage(payload, contact);
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
-
+  for (let i = 0; i < urls.length; i += 1) {
     try {
-      // openURL direto — canOpenURL no Android costuma atrasar o SOS.
-      await Linking.openURL(url);
+      await Linking.openURL(urls[i]);
       opened += 1;
-      if (i < contacts.length - 1) {
+      if (i < urls.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, 400));
       }
     } catch {
@@ -73,5 +83,5 @@ export async function openWhatsAppForContacts(
     }
   }
 
-  return { opened, skipped };
+  return { opened, skipped, urls };
 }

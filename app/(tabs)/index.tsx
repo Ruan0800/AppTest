@@ -1,4 +1,5 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import notifee from '@notifee/react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from 'expo-router/react-navigation';
 import type { ComponentProps } from 'react';
@@ -8,6 +9,7 @@ import {
   Alert,
   Animated,
   Easing,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -32,6 +34,7 @@ import {
   getAlertLocation,
   type AlertLocation,
 } from '@/src/services/locationService';
+import { getAppSettings } from '@/src/settings/appSettings';
 import type { Contact, ListeningStatus } from '@/src/types';
 
 export default function HomeScreen() {
@@ -145,6 +148,31 @@ export default function HomeScreen() {
           );
         }
         await startListening();
+
+        // OEM/bateria: se a otimização estiver ligada, a escuta em background pode falhar.
+        if (Platform.OS === 'android') {
+          try {
+            const batteryOptimized =
+              await notifee.isBatteryOptimizationEnabled();
+            if (batteryOptimized) {
+              Alert.alert(
+                'Melhorar escuta em segundo plano',
+                'Desative a otimização de bateria para este app. Assim a escuta e o alerta funcionam melhor com a tela bloqueada.',
+                [
+                  { text: 'Agora não', style: 'cancel' },
+                  {
+                    text: 'Abrir configurações',
+                    onPress: () => {
+                      void notifee.openBatteryOptimizationSettings();
+                    },
+                  },
+                ]
+              );
+            }
+          } catch {
+            // API indisponível em alguns aparelhos
+          }
+        }
       } else {
         await stopListening();
       }
@@ -159,11 +187,10 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const onSos = useCallback(async () => {
+  const runSosAlert = useCallback(async () => {
     setSosBusy(true);
     try {
       // Não espera diálogos de permissão aqui — isso travava o botão.
-      // Permissões já pedidas ao ligar a escuta; o alerta pede localização se faltar.
       void requestAlertPermissions();
 
       const result = await triggerAlert({ trigger: 'manual', force: true });
@@ -184,12 +211,13 @@ export default function HomeScreen() {
           ? 'Nenhum contato cadastrado — cadastre em Contatos para abrir o WhatsApp.'
           : result.whatsappOpened > 0
             ? `WhatsApp aberto para ${result.whatsappOpened} contato(s). Confirme o envio no app.`
-            : 'Não foi possível abrir o WhatsApp. Verifique se está instalado e se o telefone tem DDI.',
+            : result.pendingWhatsApp
+              ? 'WhatsApp pendente: toque na notificação "Abrir WhatsApp" (em background o Android bloqueia a abertura automática).'
+              : 'Não foi possível abrir o WhatsApp. Verifique se está instalado e se o telefone tem DDI.',
       ];
 
       Alert.alert('Alerta disparado', parts.join('\n'));
 
-      // Atualiza cards depois — não segura o spinner do SOS.
       void refreshSummary();
       void refreshLocation();
     } catch {
@@ -198,6 +226,28 @@ export default function HomeScreen() {
       setSosBusy(false);
     }
   }, [refreshSummary, refreshLocation]);
+
+  const onSos = useCallback(async () => {
+    const settings = await getAppSettings();
+    if (settings.confirmSos) {
+      Alert.alert(
+        'Confirmar SOS',
+        'Disparar alerta de emergência agora?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: 'Disparar',
+            style: 'destructive',
+            onPress: () => {
+              void runSosAlert();
+            },
+          },
+        ]
+      );
+      return;
+    }
+    await runSosAlert();
+  }, [runSosAlert]);
 
   const keywordBody =
     keywords.length === 0
@@ -234,12 +284,6 @@ export default function HomeScreen() {
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}>
-      <View style={styles.brandBlock}>
-        <Text style={[styles.brand, { color: colors.tint }]}>Escuta Alertas</Text>
-        <Text style={[styles.brandTagline, { color: colors.muted }]}>
-          Monitoramento por voz com alerta rápido
-        </Text>
-      </View>
 
       <View style={styles.statusBlock}>
         <View style={styles.statusLeft}>
@@ -426,17 +470,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 120,
   },
-  brandBlock: {
-    marginBottom: 14,
-    gap: 2,
-  },
-  brand: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
   brandTagline: {
     fontSize: 13,
+    marginBottom: 12,
   },
   statusBlock: {
     flexDirection: 'row',

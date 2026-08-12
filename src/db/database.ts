@@ -100,3 +100,8 @@ export async function insertAlert(
   );
   return result.lastInsertRowId;
 }
+
+export async function clearAlerts(): Promise<void> {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM alerts');
+}
