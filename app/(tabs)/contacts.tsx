@@ -17,7 +17,7 @@ import { TextField } from '@/components/ui/TextField';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { Layout } from '@/constants/Layout';
-import { MAX_CONTACTS } from '@/constants/limits';
+import { MAX_CONTACTS } from '@/src/domain/limits';
 import {
   buildFullPhone,
   DEFAULT_PHONE_COUNTRY,
@@ -27,8 +27,8 @@ import {
   addContact,
   listContacts,
   removeContact,
-} from '@/src/db/database';
-import type { Contact } from '@/src/types';
+} from '@/src/data/repositories';
+import type { Contact } from '@/src/domain/types';
 
 export default function ContactsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
@@ -37,11 +37,22 @@ export default function ContactsScreen() {
   const [name, setName] = useState('');
   const [dialCode, setDialCode] = useState(DEFAULT_PHONE_COUNTRY.dialCode);
   const [localNumber, setLocalNumber] = useState('');
+  const [telegramChatId, setTelegramChatId] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const nameRef = useRef<TextInput>(null);
   const atLimit = contacts.length >= MAX_CONTACTS;
 
   const refresh = useCallback(async () => {
-    setContacts(await listContacts());
+    try {
+      setContacts(await listContacts());
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível carregar os contatos.'
+      );
+    }
   }, []);
 
   useFocusEffect(
@@ -95,10 +106,24 @@ export default function ContactsScreen() {
       return;
     }
 
+    const chatId = telegramChatId.trim();
+    if (!chatId) {
+      Alert.alert('Telegram obrigatório', 'Informe o ID do Telegram do contato.');
+      return;
+    }
+    if (!/^-?\d{5,20}$/.test(chatId)) {
+      Alert.alert(
+        'Telegram inválido',
+        'O ID do chat é numérico, com 5 a 20 dígitos.'
+      );
+      return;
+    }
+
     try {
-      await addContact(trimmedName, fullPhone);
+      await addContact(trimmedName, fullPhone, chatId || null);
       setName('');
       setLocalNumber('');
+      setTelegramChatId('');
       setDialCode(DEFAULT_PHONE_COUNTRY.dialCode);
       await refresh();
     } catch {
@@ -124,7 +149,7 @@ export default function ContactsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.hintRow}>
         <Text style={[styles.hint, { color: colors.muted, flex: 1 }]}>
-          Contatos de emergência. No alerta, o WhatsApp abre com a mensagem pronta.
+          Contatos de emergência. O alerta sai por SMS e Telegram. O ID do Telegram é obrigatório.
         </Text>
         <Text
           style={[
@@ -134,6 +159,10 @@ export default function ContactsScreen() {
           {contacts.length}/{MAX_CONTACTS}
         </Text>
       </View>
+
+      {loadError ? (
+        <Text style={{ color: colors.danger, fontSize: 13 }}>{loadError}</Text>
+      ) : null}
 
       <TextField
         ref={nameRef}
@@ -152,6 +181,15 @@ export default function ContactsScreen() {
         onLocalNumberChange={setLocalNumber}
       />
 
+      <TextField
+        label="ID do Telegram"
+        value={telegramChatId}
+        onChangeText={setTelegramChatId}
+        placeholder="Ex: 123456789"
+        autoCapitalize="none"
+        editable={!atLimit}
+      />
+
       <Button
         label="Adicionar contato"
         onPress={onAdd}
@@ -167,7 +205,7 @@ export default function ContactsScreen() {
           <EmptyState
             icon="users"
             title="Nenhum contato ainda"
-            description="Cadastre quem deve receber o alerta pelo WhatsApp."
+            description="Cadastre quem deve receber o alerta por SMS e Telegram."
             actionLabel=""
             onAction={() => nameRef.current?.focus()}
           />
@@ -183,6 +221,11 @@ export default function ContactsScreen() {
               <Text style={{ color: colors.muted }}>
                 {formatPhoneDisplay(item.phone)}
               </Text>
+              {item.telegram_chat_id ? (
+                <Text style={{ color: colors.muted }}>
+                  Telegram {item.telegram_chat_id}
+                </Text>
+              ) : null}
             </View>
             <IconButton
               icon="trash-o"

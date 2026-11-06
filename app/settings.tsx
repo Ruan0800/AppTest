@@ -17,7 +17,9 @@ import notifee from '@notifee/react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { Layout } from '@/constants/Layout';
-import { clearAlerts } from '@/src/db/database';
+import { useAuth } from '@/src/auth/AuthContext';
+import { clearAlerts } from '@/src/data/repositories';
+import { syncListenerConfig } from '@/src/device/listeningService';
 import {
   COOLDOWN_OPTIONS_SECONDS,
   getAppSettings,
@@ -28,6 +30,7 @@ import {
 export default function SettingsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
+  const { session, signOut } = useAuth();
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [clearing, setClearing] = useState(false);
 
@@ -50,6 +53,7 @@ export default function SettingsScreen() {
   const onSelectCooldown = async (seconds: number) => {
     const next = await updateAppSettings({ cooldownSeconds: seconds });
     setSettings(next);
+    await syncListenerConfig();
   };
 
   const onBatteryOptimization = () => {
@@ -211,6 +215,41 @@ export default function SettingsScreen() {
       </Pressable>
 
       <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 8 }]}>
+        CONTA
+      </Text>
+
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: colors.card, borderColor: colors.border },
+        ]}>
+        <Text style={[styles.rowTitle, { color: colors.text }]}>
+          {session?.user.email ?? 'Sessão ativa'}
+        </Text>
+        <Pressable
+          onPress={() => {
+            Alert.alert('Sair', 'Encerrar a sessão neste aparelho?', [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Sair',
+                style: 'destructive',
+                onPress: () => {
+                  void signOut();
+                },
+              },
+            ]);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Sair"
+          style={({ pressed }) => [
+            styles.signOut,
+            { borderColor: colors.border, opacity: pressed ? 0.85 : 1 },
+          ]}>
+          <Text style={[styles.rowTitle, { color: colors.destructive }]}>Sair</Text>
+        </Pressable>
+      </View>
+
+      <Text style={[styles.sectionTitle, { color: colors.muted, marginTop: 8 }]}>
         SOBRE
       </Text>
 
@@ -294,5 +333,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
+  },
+  signOut: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderRadius: Layout.radiusSm,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -16,26 +16,39 @@ import { TextField } from '@/components/ui/TextField';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { Layout } from '@/constants/Layout';
-import { MAX_KEYWORDS } from '@/constants/limits';
+import { MAX_KEYWORDS } from '@/src/domain/limits';
+import { normalizeText } from '@/src/domain/keywordMatcher';
+import type { Keyword } from '@/src/domain/types';
 import {
   addKeyword,
   listKeywords,
   removeKeyword,
-} from '@/src/db/database';
-import { normalizeText } from '@/src/services/keywordMatcher';
-import { invalidateKeywordCache } from '@/src/services/listeningService';
-import type { Keyword } from '@/src/types';
+} from '@/src/data/repositories';
+import {
+  syncListenerKeywords,
+  validatePhrase,
+} from '@/src/device/listeningService';
 
 export default function KeywordsScreen() {
   const colorScheme = useColorScheme() ?? 'light';
   const colors = Colors[colorScheme];
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [word, setWord] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const inputRef = useRef<TextInput>(null);
   const atLimit = keywords.length >= MAX_KEYWORDS;
 
   const refresh = useCallback(async () => {
-    setKeywords(await listKeywords());
+    try {
+      setKeywords(await listKeywords());
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível carregar as palavras.'
+      );
+    }
   }, []);
 
   useFocusEffect(
@@ -67,12 +80,25 @@ export default function KeywordsScreen() {
     }
 
     try {
-      await addKeyword(trimmed.toLowerCase());
-      invalidateKeywordCache();
+      const validation = await validatePhrase(trimmed);
+      if (!validation.ok) {
+        Alert.alert(
+          'Fora do vocabulário',
+          validation.missing.length
+            ? `O modelo de voz não conhece: ${validation.missing.join(', ')}. Escolha outras palavras.`
+            : 'Digite uma frase com palavras que o modelo reconhece.'
+        );
+        return;
+      }
+      await addKeyword(validation.phrase || trimmed.toLowerCase());
+      await syncListenerKeywords();
       setWord('');
       await refresh();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível salvar a palavra-chave.');
+    } catch (error) {
+      Alert.alert(
+        'Erro',
+        error instanceof Error ? error.message : 'Não foi possível salvar a palavra-chave.'
+      );
     }
   };
 
@@ -84,7 +110,7 @@ export default function KeywordsScreen() {
         style: 'destructive',
         onPress: async () => {
           await removeKeyword(item.id);
-          invalidateKeywordCache();
+          await syncListenerKeywords();
           await refresh();
         },
       },
@@ -95,7 +121,7 @@ export default function KeywordsScreen() {
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.hintRow}>
         <Text style={[styles.hint, { color: colors.muted, flex: 1 }]}>
-          Quando o app ouvir uma destas palavras, um alerta será disparado.
+          Quando o app ouvir uma destas frases, o alerta sai por SMS e Telegram. Cada palavra precisa existir no vocabulário do modelo.
         </Text>
         <Text
           style={[
@@ -105,6 +131,10 @@ export default function KeywordsScreen() {
           {keywords.length}/{MAX_KEYWORDS}
         </Text>
       </View>
+
+      {loadError ? (
+        <Text style={{ color: colors.danger, fontSize: 13 }}>{loadError}</Text>
+      ) : null}
 
       <View style={styles.form}>
         <View style={styles.inputGrow}>

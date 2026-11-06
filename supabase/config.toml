@@ -1,0 +1,7 @@
+project_id = "vigintel"
+
+[functions.send-alert]
+verify_jwt = false
+
+[functions.catalog]
+verify_jwt = false

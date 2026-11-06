@@ -1,5 +1,4 @@
-const blue = '#2F6BFF';
-const blueDark = '#7AA2FF';
+const blue = '#1F45FF';
 
 export default {
   light: {
@@ -38,9 +37,9 @@ export default {
   dark: {
     text: '#F8FAFC',
     background: '#0B1220',
-    tint: blueDark,
+    tint: blue,
     tabIconDefault: '#64748B',
-    tabIconSelected: blueDark,
+    tabIconSelected: blue,
     card: '#152038',
     muted: '#94A3B8',
     border: '#243049',
@@ -55,12 +54,12 @@ export default {
     starting: '#93C5FD',
     tabBar: '#152038',
     tabBarActivePill: '#1E3A5F',
-    tabBarActiveIcon: blueDark,
+    tabBarActiveIcon: blue,
     tabBarInactiveIcon: '#64748B',
     tabBarShadow: '#000000',
     accentSoft: '#1E3A5F',
     badgeVoiceBg: '#1E3A5F',
-    badgeVoiceText: blueDark,
+    badgeVoiceText: blue,
     badgeSosBg: 'rgba(220,38,38,0.22)',
     badgeSosText: '#FCA5A5',
     badgeOkBg: 'rgba(22,163,74,0.22)',

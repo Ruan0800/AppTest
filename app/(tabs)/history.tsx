@@ -13,8 +13,8 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { Layout } from '@/constants/Layout';
-import { listAlerts } from '@/src/db/database';
-import type { AlertRecord, AlertTrigger } from '@/src/types';
+import { listAlerts } from '@/src/data/repositories';
+import type { AlertRecord, AlertTrigger } from '@/src/domain/types';
 
 type FilterKey = 'all' | AlertTrigger;
 
@@ -31,7 +31,13 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 ];
 
 function parseAlertDate(value: string): Date | null {
-  const normalized = value.includes('T') ? value : `${value.replace(' ', 'T')}Z`;
+  const trimmed = value.trim();
+  const normalized =
+    /[zZ]$/.test(trimmed) || /[+-]\d{2}:\d{2}$/.test(trimmed)
+      ? trimmed
+      : trimmed.includes('T')
+        ? `${trimmed}Z`
+        : `${trimmed.replace(' ', 'T')}Z`;
   const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 }
@@ -98,9 +104,19 @@ export default function HistoryScreen() {
   const colors = Colors[colorScheme];
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setAlerts(await listAlerts());
+    try {
+      setAlerts(await listAlerts());
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível carregar o histórico.'
+      );
+    }
   }, []);
 
   useFocusEffect(
@@ -135,6 +151,9 @@ export default function HistoryScreen() {
             {countLabel}
           </Text>
         </View>
+        {loadError ? (
+          <Text style={{ color: colors.danger, fontSize: 13 }}>{loadError}</Text>
+        ) : null}
 
         <View style={styles.filters}>
           {FILTERS.map((item) => {
@@ -195,15 +214,19 @@ export default function HistoryScreen() {
         )}
         renderItem={({ item }) => {
           const isVoice = item.trigger === 'voice';
-          const notified = !!item.notified;
+          const sync = item.sync_status;
+          const failed = sync === 'failed';
           const title = isVoice
             ? item.matched_word
               ? `"${item.matched_word}"`
               : 'Alerta por voz'
             : 'Alerta SOS';
-          const statusLabel = notified
-            ? 'Notificação enviada'
-            : 'Falha na notificação';
+          const statusLabel =
+            sync === 'sent'
+              ? 'Enviado por SMS e Telegram'
+              : sync === 'failed'
+                ? 'Falha no envio'
+                : 'Envio pendente';
           const iconName = isVoice ? 'microphone' : 'exclamation-circle';
           const iconBg = isVoice ? colors.badgeVoiceBg : colors.badgeSosBg;
           const iconColor = isVoice
@@ -215,8 +238,8 @@ export default function HistoryScreen() {
               style={[
                 styles.card,
                 {
-                  backgroundColor: notified ? colors.card : colors.badgeFailBg,
-                  borderColor: notified ? colors.border : colors.warning,
+                  backgroundColor: failed ? colors.badgeFailBg : colors.card,
+                  borderColor: failed ? colors.warning : colors.border,
                 },
               ]}>
               <View style={[styles.iconBadge, { backgroundColor: iconBg }]}>
@@ -231,7 +254,7 @@ export default function HistoryScreen() {
                   style={[
                     styles.cardStatus,
                     {
-                      color: notified ? colors.success : colors.warning,
+                      color: failed ? colors.warning : colors.success,
                     },
                   ]}>
                   {statusLabel}

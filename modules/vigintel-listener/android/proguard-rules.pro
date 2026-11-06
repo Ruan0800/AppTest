@@ -1,0 +1,3 @@
+-keep class expo.modules.vigintellistener.AlertSyncWorker { *; }
+-keep class org.vosk.** { *; }
+-keep class com.sun.jna.** { *; }

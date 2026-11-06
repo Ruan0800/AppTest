@@ -35,7 +35,7 @@ export function findCountryByDialCode(dialCode: string): PhoneCountry | undefine
   return PHONE_COUNTRIES.find((c) => c.dialCode === digits);
 }
 
-/** Monta DDI + número local só com dígitos (formato WhatsApp). */
+/** Monta DDI + número local só com dígitos. */
 export function buildFullPhone(dialCode: string, localNumber: string): string {
   return `${dialCode.replace(/\D/g, '')}${localNumber.replace(/\D/g, '')}`;
 }

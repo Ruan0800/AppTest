@@ -21,21 +21,21 @@ import {
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { Layout } from '@/constants/Layout';
-import { listContacts, listKeywords } from '@/src/db/database';
-import { requestAlertPermissions, triggerAlert } from '@/src/services/alertService';
+import { listContacts, listKeywords, waitForSmsResult } from '@/src/data/repositories';
+import type { Contact, ListeningStatus } from '@/src/domain/types';
+import { requestAlertPermissions, triggerAlert } from '@/src/device/alertService';
 import {
   isListening,
   startListening,
   stopListening,
-  subscribeListeningStatus,
-  subscribeTranscript,
-} from '@/src/services/listeningService';
+  subscribeDetections,
+  subscribeListeningSnapshot,
+} from '@/src/device/listeningService';
 import {
   getAlertLocation,
   type AlertLocation,
-} from '@/src/services/locationService';
+} from '@/src/device/locationService';
 import { getAppSettings } from '@/src/settings/appSettings';
-import type { Contact, ListeningStatus } from '@/src/types';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -46,27 +46,48 @@ export default function HomeScreen() {
   const [status, setStatus] = useState<ListeningStatus>(
     isListening() ? 'listening' : 'idle'
   );
-  const [transcript, setTranscript] = useState('');
+  const [reason, setReason] = useState<string | null>(null);
+  const [phraseCount, setPhraseCount] = useState(0);
+  const [statusNotice, setStatusNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sosBusy, setSosBusy] = useState(false);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [location, setLocation] = useState<AlertLocation | null>(null);
   const [locationLoading, setLocationLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubStatus = subscribeListeningStatus(setStatus);
-    const unsubTranscript = subscribeTranscript(setTranscript);
-    return () => {
-      unsubStatus();
-      unsubTranscript();
-    };
+    return subscribeListeningSnapshot((next) => {
+      setStatus(next.status);
+      setReason(next.reason);
+      setPhraseCount(next.phraseCount);
+    });
+  }, []);
+
+  useEffect(() => {
+    return subscribeDetections((event) => {
+      const sending = `Palavra reconhecida: "${event.phrase}". Enviando alerta para o Telegram…`;
+      setStatusNotice(sending);
+      void waitForSmsResult(event.clientAlertId).then((result) => {
+        setStatusNotice(`Palavra reconhecida: "${event.phrase}". ${result}`);
+      });
+    });
   }, []);
 
   const refreshSummary = useCallback(async () => {
-    const [kw, ct] = await Promise.all([listKeywords(), listContacts()]);
-    setKeywords(kw.map((k) => k.word));
-    setContacts(ct);
+    try {
+      const [kw, ct] = await Promise.all([listKeywords(), listContacts()]);
+      setKeywords(kw.map((k) => k.word));
+      setContacts(ct);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : 'Não foi possível carregar os dados do servidor.'
+      );
+    }
   }, []);
 
   const refreshLocation = useCallback(async () => {
@@ -86,7 +107,9 @@ export default function HomeScreen() {
     }, [refreshSummary, refreshLocation])
   );
 
-  const listeningOn = status === 'listening' || status === 'starting';
+  const protectionOn =
+    status === 'listening' || status === 'starting' || status === 'paused';
+  const listeningOn = status === 'listening';
 
   useEffect(() => {
     if (!listeningOn) {
@@ -117,15 +140,41 @@ export default function HomeScreen() {
 
   const statusMeta = useMemo(() => {
     if (status === 'listening') {
-      return { title: 'Protegido', subtitle: 'Escuta ativa', dot: colors.tint };
+      const missingPhrase =
+        reason === 'no_phrases' || reason === 'no_valid_phrases';
+      return {
+        title: 'Protegido',
+        subtitle: missingPhrase
+          ? 'Cadastre uma frase que exista no vocabulário'
+          : 'Ativa',
+        dot: colors.tint,
+      };
     }
     if (status === 'starting') {
       return { title: 'Iniciando…', subtitle: 'Preparando escuta', dot: colors.starting };
     }
+    if (status === 'paused') {
+      return {
+        title: 'Pausado',
+        subtitle:
+          reason === 'microphone_busy'
+            ? 'Microfone em uso por outro app'
+            : 'Escuta pausada',
+        dot: colors.warning,
+      };
+    }
     if (status === 'error') {
+      const subtitle =
+        reason === 'permission'
+          ? 'Permita o microfone'
+          : reason === 'audio'
+            ? 'Microfone ou modelo de voz falhou'
+            : reason && reason !== 'audio'
+              ? reason
+              : 'Tente ligar a escuta de novo';
       return {
         title: 'Atenção',
-        subtitle: 'Tente ligar a escuta de novo',
+        subtitle,
         dot: colors.danger,
       };
     }
@@ -134,19 +183,13 @@ export default function HomeScreen() {
       subtitle: 'Ligue a escuta para monitorar',
       dot: colors.muted,
     };
-  }, [status, colors.tint, colors.muted, colors.starting, colors.danger]);
+  }, [status, reason, colors.tint, colors.muted, colors.starting, colors.danger, colors.warning]);
 
   const toggleListening = useCallback(async (value: boolean) => {
     setBusy(true);
     try {
       if (value) {
-        const notified = await requestAlertPermissions();
-        if (!notified) {
-          Alert.alert(
-            'Notificações',
-            'Permita notificações para receber alertas quando uma palavra-chave for detectada.'
-          );
-        }
+        await requestAlertPermissions();
         await startListening();
 
         // OEM/bateria: se a otimização estiver ligada, a escuta em background pode falhar.
@@ -193,35 +236,24 @@ export default function HomeScreen() {
       // Não espera diálogos de permissão aqui — isso travava o botão.
       void requestAlertPermissions();
 
+      setStatusNotice('Enviando alerta para o Telegram…');
       const result = await triggerAlert({ trigger: 'manual', force: true });
       if (!result.triggered) {
-        Alert.alert(
-          'Aguarde',
-          'Um alerta foi disparado recentemente. Tente de novo em alguns segundos.'
-        );
+        setStatusNotice('Um alerta foi enviado agora há pouco. Aguarde alguns segundos.');
         return;
       }
-
-      const parts = [
-        result.notified ? 'Notificação local enviada.' : 'Notificação local falhou.',
-        result.hasLocation
-          ? 'Localização incluída na mensagem.'
-          : 'Localização indisponível (permita o GPS).',
-        result.contactsCount === 0
-          ? 'Nenhum contato cadastrado — cadastre em Contatos para abrir o WhatsApp.'
-          : result.whatsappOpened > 0
-            ? `WhatsApp aberto para ${result.whatsappOpened} contato(s). Confirme o envio no app.`
-            : result.pendingWhatsApp
-              ? 'WhatsApp pendente: toque na notificação "Abrir WhatsApp" (em background o Android bloqueia a abertura automática).'
-              : 'Não foi possível abrir o WhatsApp. Verifique se está instalado e se o telefone tem DDI.',
-      ];
-
-      Alert.alert('Alerta disparado', parts.join('\n'));
+      if (!result.hasLocation) {
+        setStatusNotice('Alerta retido. Ligue o GPS: ele só sai com a localização.');
+        return;
+      }
+      setStatusNotice(result.summary || 'Alerta enviado para o Telegram.');
 
       void refreshSummary();
       void refreshLocation();
-    } catch {
-      Alert.alert('Erro', 'Não foi possível disparar o alerta.');
+    } catch (error) {
+      setStatusNotice(
+        error instanceof Error ? error.message : 'Não foi possível enviar o alerta.'
+      );
     } finally {
       setSosBusy(false);
     }
@@ -301,14 +333,18 @@ export default function HomeScreen() {
           <ActivityIndicator color={colors.tint} />
         ) : (
           <Switch
-            value={listeningOn}
+            value={protectionOn}
             onValueChange={toggleListening}
             trackColor={{ false: colors.border, true: colors.switchTrackOn }}
-            thumbColor={listeningOn ? colors.tint : colors.switchThumbOff}
+            thumbColor={protectionOn ? colors.tint : colors.switchThumbOff}
             accessibilityLabel="Ligar ou desligar escuta"
           />
         )}
       </View>
+
+      {loadError ? (
+        <Text style={[styles.sosHint, { color: colors.danger }]}>{loadError}</Text>
+      ) : null}
 
       <View style={styles.sosArea}>
         <View style={styles.sosStage}>
@@ -330,7 +366,7 @@ export default function HomeScreen() {
             disabled={sosBusy}
             accessibilityRole="button"
             accessibilityLabel="Disparar alerta SOS"
-            accessibilityHint="Envia notificação e abre o WhatsApp dos contatos"
+            accessibilityHint="Envia o alerta por SMS e Telegram"
             style={({ pressed }) => [
               styles.sosOuter,
               {
@@ -354,13 +390,26 @@ export default function HomeScreen() {
             </View>
           </Pressable>
         </View>
-        {listeningOn && !!transcript ? (
-          <Text style={[styles.listeningText, { color: colors.muted }]} numberOfLines={1}>
-            “{transcript}”
+        {statusNotice ? (
+          <Text
+            style={[
+              styles.listeningText,
+              {
+                color: statusNotice.includes('não enviado') || statusNotice.includes('Não foi possível')
+                  ? colors.warning
+                  : statusNotice.includes('enviado')
+                    ? colors.success
+                    : colors.tint,
+              },
+            ]}
+            numberOfLines={3}>
+            {statusNotice}
           </Text>
         ) : (
           <Text style={[styles.sosHint, { color: colors.muted }]}>
-            Ou fale uma palavra-chave
+            {listeningOn && phraseCount === 0
+              ? 'A proteção ainda não carregou a palavra-chave'
+              : 'Ou fale uma palavra-chave'}
           </Text>
         )}
       </View>

@@ -1,0 +1,13 @@
+{
+  "name": "vigintel-listener",
+  "version": "1.0.0",
+  "description": "Foreground microphone service that detects code phrases offline with Vosk.",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {},
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
+  }
+}

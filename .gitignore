@@ -31,6 +31,7 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
 
 # typescript
@@ -39,6 +40,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Vosk model (~50 MB). Download locally; do not commit.
+/assets/model-small-pt/
 
 # local machine SDK path (kept if android/ is committed after prebuild)
 android/local.properties
