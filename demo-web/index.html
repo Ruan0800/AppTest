@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vigintel - Demonstração</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" />
+<style>
+  :root {
+    --tint: #1F45FF; --text: #0F172A; --bg: #FFFFFF; --card: #F5F7FB; --muted: #64748B; --border: #E2E8F0;
+    --danger: #DC2626; --success: #16A34A; --warning: #D97706; --sos: #DC2626; --sosring: #FEE2E2;
+    --track: #BFDBFE; --thumboff: #F8FAFC; --tabbar: #FFFFFF; --pill: #E8F0FF; --tabinactive: #94A3B8;
+    --shadow: #1E3A8A; --okbg: #DCFCE7; --oktext: #15803D;
+  }
+  body.dark {
+    --text: #F8FAFC; --bg: #0B1220; --card: #152038; --muted: #94A3B8; --border: #243049;
+    --danger: #F87171; --success: #4ADE80; --warning: #FBBF24; --sosring: rgba(220,38,38,.18);
+    --track: #1E3A5F; --thumboff: #E2E8F0; --tabbar: #152038; --pill: #1E3A5F; --tabinactive: #64748B; --shadow: #000;
+    --okbg: rgba(22,163,74,.22); --oktext: #86EFAC;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #e5e9f2; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 16px; }
+  .phone { width: 390px; height: min(820px, calc(100vh - 32px)); border-radius: 44px; background: var(--bg); color: var(--text);
+    border: 10px solid #0b0f1a; box-shadow: 0 24px 70px rgba(15,23,42,.35); position: relative; overflow: hidden; display: flex; flex-direction: column; }
+  header { background: var(--tint); height: 64px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; color: #fff; }
+  header img { height: 36px; width: 108px; object-fit: contain; }
+  header button { background: none; border: 0; color: #fff; font-size: 20px; width: 36px; height: 36px; cursor: pointer; }
+  .screen { flex: 1; overflow-y: auto; padding: 8px 20px 120px; scrollbar-width: none; }
+  .screen::-webkit-scrollbar { display: none; }
+  .tab { display: none; } .tab.active { display: block; }
+
+  .status { display: flex; align-items: center; gap: 12px; margin: 12px 0 16px; }
+  .status .left { flex: 1; }
+  .status .row { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .status h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -.4px; }
+  .status small { display: block; padding-left: 18px; font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  .switch { width: 52px; height: 32px; border-radius: 16px; background: var(--border); position: relative; cursor: pointer; border: 0; transition: .2s; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%; background: var(--thumboff); transition: .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .switch.on { background: var(--track); }
+  .switch.on::after { left: 24px; background: var(--tint); }
+
+  .sosArea { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 22px; }
+  .stage { width: 210px; height: 210px; position: relative; display: flex; align-items: center; justify-content: center; }
+  .pulse { position: absolute; width: 196px; height: 196px; border-radius: 50%; background: var(--sosring); opacity: 0; pointer-events: none; }
+  .sosOuter { position: relative; z-index: 1; }
+  .pulse.on { animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { transform: scale(1); opacity: .55; } 50% { transform: scale(1.08); opacity: .15; } }
+  .sosOuter { width: 196px; height: 196px; border-radius: 50%; background: var(--sosring); border: 0; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .sosBtn { width: 164px; height: 164px; border-radius: 50%; background: var(--sos); color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 8px 16px rgba(220,38,38,.32); }
+  .sosOuter:active .sosBtn { transform: scale(.97); }
+  .sosBtn b { font-size: 40px; font-weight: 800; letter-spacing: 3px; }
+  .sosBtn span { font-size: 12px; margin-top: 4px; opacity: .92; font-weight: 500; }
+  .notice { font-size: 13px; text-align: center; padding: 0 24px; min-height: 36px; color: var(--muted); }
+  .notice.italic { font-style: italic; } .notice.ok { color: var(--success); } .notice.warn { color: var(--warning); } .notice.info { color: var(--tint); }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; cursor: pointer; min-height: 132px;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 14px; }
+  .card .head { display: flex; align-items: center; gap: 12px; }
+  .badge { width: 36px; height: 36px; border-radius: 12px; background: rgba(31,69,255,.09); color: var(--tint); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .card .t { flex: 1; } .card .t b { display: block; color: var(--tint); font-size: 18px; } .card .t span { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .card .head i.fa-angle-right { color: var(--muted); font-size: 18px; }
+  .card hr { border: 0; height: 1px; background: var(--border); margin: 0; width: 100%; }
+  .card p { margin: 0; font-size: 15px; line-height: 22px; font-weight: 500; white-space: pre-line; }
+
+  .page h3 { font-size: 22px; margin: 12px 0 14px; letter-spacing: -.3px; }
+  .item { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+  .item .grow { flex: 1; font-weight: 600; } .item small { display: block; color: var(--muted); font-weight: 500; margin-top: 2px; }
+  .item button { background: none; border: 0; color: var(--danger); cursor: pointer; font-size: 16px; }
+  .add { display: flex; gap: 8px; margin-bottom: 14px; }
+  input { font: inherit; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 12px; padding: 11px 12px; flex: 1; min-width: 0; width: 100%; }
+  .btn { background: var(--tint); color: #fff; border: 0; border-radius: 12px; padding: 11px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  .btn.ghost { background: var(--card); color: var(--text); border: 1px solid var(--border); }
+  .pill { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 600; }
+  .pill.voice { background: var(--pill); color: var(--tint); } .pill.sos { background: var(--sosring); color: var(--danger); } .pill.ok { background: var(--okbg); color: var(--oktext); }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+  label { font-size: 12px; color: var(--muted); display: block; margin: 12px 0 6px; }
+
+  nav { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: center; padding-bottom: 28px; pointer-events: none; }
+  nav .bar { pointer-events: auto; width: 72%; max-width: 340px; min-height: 64px; background: var(--tabbar); border-radius: 40px; padding: 8px 10px;
+    display: flex; align-items: center; justify-content: space-between; box-shadow: 0 8px 16px color-mix(in srgb, var(--shadow) 25%, transparent); }
+  body.dark nav .bar { border: 1px solid var(--border); }
+  nav button { flex: 1; border: 0; background: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  nav button span { width: 48px; height: 48px; border-radius: 24px; display: flex; align-items: center; justify-content: center; color: var(--tabinactive); font-size: 20px; transition: .15s; }
+  nav button.active span { background: var(--pill); color: var(--tint); font-size: 22px; width: 46px; height: 52px; border-radius: 22px; }
+
+  .modal { position: absolute; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: flex-end; z-index: 20; }
+  .modal.show { display: flex; }
+  .sheet { background: var(--bg); width: 100%; border-radius: 24px 24px 0 0; padding: 20px; }
+  .sheet h3 { margin: 0 0 4px; font-size: 20px; }
+  .sheet .actions { display: flex; gap: 8px; margin-top: 16px; }
+  .sheet .actions .btn { flex: 1; }
+
+  .toast { position: absolute; top: 74px; left: 16px; right: 16px; background: var(--success); color: #fff; padding: 12px 16px; border-radius: 14px; font-weight: 600; font-size: 14px;
+    transform: translateY(-160px); transition: transform .35s; z-index: 30; box-shadow: 0 8px 20px rgba(0,0,0,.25); }
+  .toast.show { transform: translateY(0); } .toast.bad { background: var(--danger); }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone">
+  <header>
+    <button id="openCfg" title="Configurações"><i class="fa fa-cog"></i></button>
+    <img src="logo.png" alt="Vigintel" />
+    <button id="theme" title="Tema"><i class="fa fa-moon-o"></i></button>
+  </header>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="screen">
+    <!-- INÍCIO -->
+    <div class="tab active" id="tab-index">
+      <div class="status">
+        <div class="left">
+          <div class="row"><span class="dot" id="dot"></span><h2 id="stTitle">Desprotegido</h2></div>
+          <small id="stSub">Ligue a escuta para monitorar</small>
+        </div>
+        <button class="switch" id="switch" aria-label="Ligar ou desligar escuta"></button>
+      </div>
+
+      <div class="sosArea">
+        <div class="stage">
+          <div class="pulse" id="pulse"></div>
+          <button class="sosOuter" id="sos"><div class="sosBtn"><b>SOS</b><span>Toque para alertar</span></div></button>
+        </div>
+        <div class="notice" id="notice">Ou fale uma palavra-chave</div>
+      </div>
+
+      <div class="card" data-go="keywords">
+        <div class="head"><div class="badge"><i class="fa fa-microphone"></i></div>
+          <div class="t"><b>Palavras</b><span id="kwSub"></span></div><i class="fa fa-angle-right"></i></div>
+        <hr /><p id="kwBody"></p>
+      </div>
+      <div class="card" data-go="contacts">
+        <div class="head"><div class="badge"><i class="fa fa-users"></i></div>
+          <div class="t"><b>Contatos</b><span id="ctSub"></span></div><i class="fa fa-angle-right"></i></div>
+        <hr /><p id="ctBody"></p>
+      </div>
+      <div class="card" id="locCard">
+        <div class="head"><div class="badge"><i class="fa fa-map-marker"></i></div>
+          <div class="t"><b>Localização</b><span id="locSub">GPS</span></div><i class="fa fa-angle-right"></i></div>
+        <hr /><p id="locBody">Toque para obter a localização atual</p>
+      </div>
+    </div>
+
+    <!-- PALAVRAS -->
+    <div class="tab page" id="tab-keywords">
+      <h3>Palavras-chave</h3>
+      <div class="add"><input id="newWord" placeholder="Nova palavra ou frase" /><button class="btn" id="addWord">Adicionar</button></div>
+      <div id="kwList"></div>
+    </div>
+
+    <!-- CONTATOS -->
+    <div class="tab page" id="tab-contacts">
+      <h3>Contatos</h3>
+      <div class="add"><input id="ctName" placeholder="Nome" style="flex:.8" /><input id="ctChat" placeholder="Chat ID Telegram" /></div>
+      <button class="btn" id="addContact" style="width:100%;margin-bottom:14px">Adicionar contato</button>
+      <div id="ctList"></div>
+    </div>
+
+    <!-- HISTÓRICO -->
+    <div class="tab page" id="tab-history">
+      <h3>Histórico</h3>
+      <div id="hsList"></div>
+    </div>
+  </div>
+
+  <nav><div class="bar" id="bar">
+    <button data-tab="index" class="active"><span><i class="fa fa-shield"></i></span></button>
+    <button data-tab="keywords"><span><i class="fa fa-microphone"></i></span></button>
+    <button data-tab="contacts"><span><i class="fa fa-users"></i></span></button>
+    <button data-tab="history"><span><i class="fa fa-history"></i></span></button>
+  </div></nav>
+
+  <div class="modal" id="confirmModal"><div class="sheet">
+    <h3>Confirmar SOS</h3>
+    <p style="color:var(--muted);margin:6px 0 0">Disparar alerta de emergência agora?</p>
+    <div class="actions"><button class="btn ghost" id="sosNo">Cancelar</button><button class="btn" id="sosYes" style="background:var(--sos)">Disparar</button></div>
+  </div></div>
+
+  <div class="modal" id="modal"><div class="sheet">
+    <h3>Conexão com o Telegram</h3>
+    <label>Token do bot</label><input id="token" type="password" placeholder="123456:ABC..." />
+    <label>Chat ID padrão (usado se não houver contatos)</label><input id="chat" placeholder="123456789" />
+    <div class="actions"><button class="btn ghost" id="closeCfg">Fechar</button><button class="btn" id="saveCfg">Salvar</button></div>
+  </div></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const store = {
+  get: (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set: (k, v) => localStorage.setItem(k, JSON.stringify(v)),
+};
+
+// Aceita #token=...&chat=... para não precisar digitar.
+(function () {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.get('token')) store.set('token', p.get('token'));
+  if (p.get('chat')) {
+    store.set('chat', p.get('chat'));
+    const cts = store.get('contacts', []);
+    if (!cts.length) store.set('contacts', [{ name: 'Contato de emergência', chat: p.get('chat') }]);
+  }
+  if (location.hash) history.replaceState(null, '', location.pathname);
+})();
+
+let keywords = store.get('keywords', ['socorro', 'me ajuda', 'ajuda']);
+let contacts = store.get('contacts', []);
+let hist = store.get('history', []);
+let location_ = null, listening = false, rec = null, lastAlert = 0;
+
+const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+const plural = (n) => `${n} cadastrada${n === 1 ? '' : 's'}`;
+const pluralM = (n) => `${n} cadastrado${n === 1 ? '' : 's'}`;
+
+function toast(msg, bad = false) {
+  const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (bad ? ' bad' : '');
+  setTimeout(() => (t.className = 'toast' + (bad ? ' bad' : '')), 4200);
+}
+function notice(msg, cls = '') { const n = $('notice'); n.textContent = msg; n.className = 'notice italic ' + cls; }
+
+function render() {
+  $('kwSub').textContent = plural(keywords.length);
+  $('kwBody').textContent = keywords.length === 0 ? 'Nenhuma palavra cadastrada.\nToque para adicionar.'
+    : keywords.slice(0, 4).join('  ·  ') + (keywords.length > 4 ? `\n+${keywords.length - 4} mais` : '');
+  $('ctSub').textContent = pluralM(contacts.length);
+  $('ctBody').textContent = contacts.length === 0 ? 'Nenhum contato cadastrado.\nToque para adicionar.'
+    : contacts.slice(0, 3).map((c) => `${c.name}\nTelegram ${c.chat}`).join('\n\n') + (contacts.length > 3 ? `\n\n+${contacts.length - 3} mais` : '');
+
+  $('kwList').innerHTML = keywords.length ? '' : '<div class="empty">Nenhuma palavra cadastrada.</div>';
+  keywords.forEach((w, i) => {
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = `<div class="grow"></div><button><i class="fa fa-trash"></i></button>`;
+    d.firstChild.textContent = w;
+    d.lastChild.onclick = () => { keywords.splice(i, 1); store.set('keywords', keywords); render(); };
+    $('kwList').appendChild(d);
+  });
+
+  $('ctList').innerHTML = contacts.length ? '' : '<div class="empty">Nenhum contato cadastrado.</div>';
+  contacts.forEach((c, i) => {
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = `<div class="grow"><span></span><small></small></div><button><i class="fa fa-trash"></i></button>`;
+    d.querySelector('span').textContent = c.name; d.querySelector('small').textContent = 'Telegram ' + c.chat;
+    d.lastChild.onclick = () => { contacts.splice(i, 1); store.set('contacts', contacts); render(); };
+    $('ctList').appendChild(d);
+  });
+
+  $('hsList').innerHTML = hist.length ? '' : '<div class="empty">Nenhum alerta ainda.</div>';
+  hist.forEach((h) => {
+    const d = document.createElement('div'); d.className = 'item';
+    d.innerHTML = `<div class="grow"><span></span><small></small></div><span class="pill"></span>`;
+    d.querySelector('span').textContent = h.phrase; d.querySelector('small').textContent = h.when;
+    const p = d.lastChild; p.textContent = h.trigger === 'voz' ? 'Voz' : 'SOS'; p.classList.add(h.trigger === 'voz' ? 'voice' : 'sos');
+    $('hsList').appendChild(d);
+  });
+}
+
+function setStatus() {
+  const on = listening;
+  $('dot').style.background = on ? 'var(--tint)' : 'var(--muted)';
+  $('stTitle').textContent = on ? 'Protegido' : 'Desprotegido';
+  $('stSub').textContent = on ? 'Ativa' : 'Ligue a escuta para monitorar';
+  $('switch').classList.toggle('on', on);
+  $('pulse').classList.toggle('on', on);
+}
+
+// Localização
+function refreshLocation() {
+  $('locBody').textContent = 'Atualizando localização…';
+  if (!navigator.geolocation) { $('locBody').textContent = 'GPS indisponível neste navegador'; return Promise.resolve(null); }
+  return new Promise((resolve) => navigator.geolocation.getCurrentPosition(
+    (p) => {
+      location_ = { lat: p.coords.latitude, lng: p.coords.longitude };
+      $('locSub').textContent = 'Atual';
+      $('locBody').textContent = `${location_.lat.toFixed(5)}, ${location_.lng.toFixed(5)}`;
+      resolve(location_);
+    },
+    () => { $('locBody').textContent = 'Toque para obter a localização atual'; resolve(null); },
+    { timeout: 5000 }
+  ));
+}
+$('locCard').onclick = refreshLocation;
+
+// Envio ao Telegram
+async function sendAlert(phrase, trigger) {
+  const token = store.get('token', ''), fallback = store.get('chat', '');
+  const targets = contacts.length ? contacts.map((c) => c.chat) : fallback ? [fallback] : [];
+  if (!token || targets.length === 0) { toast('Configure o bot e um contato', true); notice('Configure o token e um contato.', 'warn'); return; }
+
+  const now = Date.now();
+  if (trigger === 'voz' && now - lastAlert < 8000) return;
+  lastAlert = now;
+
+  notice(trigger === 'voz' ? `Palavra reconhecida: "${phrase}". Enviando alerta para o Telegram…` : 'Enviando alerta para o Telegram…', 'info');
+  const loc = location_ || (await refreshLocation());
+  const when = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+  const map = loc ? `https://maps.google.com/?q=${loc.lat},${loc.lng}` : 'localização indisponível';
+  const text = `Alerta Vigintel\nFrase: ${phrase}\nQuando: ${when}\nLocal: ${map}`;
+
+  let sent = 0;
+  for (const chat of targets) {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: chat, text }),
+      });
+      if ((await r.json()).ok) sent++;
+    } catch {}
+  }
+  if (sent > 0) {
+    notice(trigger === 'voz' ? `Palavra reconhecida: "${phrase}". Telegram enviado para ${sent} contato(s).` : `Telegram enviado para ${sent} contato(s).`, 'ok');
+    toast('✅ Alerta enviado no Telegram');
+    hist.unshift({ phrase, trigger, when }); store.set('history', hist.slice(0, 30)); render();
+  } else {
+    notice('Não foi possível enviar o alerta.', 'warn'); toast('Falha ao enviar o alerta', true);
+  }
+}
+
+// Voz
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+function startListening() {
+  if (!SR) { toast('Use o Chrome ou o Edge', true); return; }
+  rec = new SR(); rec.lang = 'pt-BR'; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = (ev) => {
+    const text = ev.results[ev.results.length - 1][0].transcript.trim();
+    const hit = keywords.find((w) => norm(text).includes(norm(w)));
+    if (hit) sendAlert(hit, 'voz');
+  };
+  rec.onerror = (e) => { if (e.error === 'not-allowed') { listening = false; setStatus(); toast('Permita o microfone', true); } };
+  rec.onend = () => { if (listening) { try { rec.start(); } catch {} } };
+  rec.start(); listening = true; setStatus(); refreshLocation();
+  notice('Escutando… fale uma palavra-chave');
+}
+function stopListening() { listening = false; if (rec) rec.stop(); setStatus(); notice('Ou fale uma palavra-chave'); $('notice').className = 'notice'; }
+$('switch').onclick = () => (listening ? stopListening() : startListening());
+
+$('sos').onclick = () => $('confirmModal').classList.add('show');
+$('sosNo').onclick = () => $('confirmModal').classList.remove('show');
+$('sosYes').onclick = () => { $('confirmModal').classList.remove('show'); sendAlert('SOS', 'manual'); };
+
+// Navegação
+function go(tab) {
+  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + tab));
+  document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelector('.screen').scrollTop = 0;
+}
+document.querySelectorAll('nav button').forEach((b) => (b.onclick = () => go(b.dataset.tab)));
+document.querySelectorAll('[data-go]').forEach((c) => (c.onclick = () => go(c.dataset.go)));
+
+$('addWord').onclick = () => {
+  const w = $('newWord').value.trim().toLowerCase();
+  if (w && !keywords.includes(w)) { keywords.push(w); store.set('keywords', keywords); render(); }
+  $('newWord').value = '';
+};
+$('addContact').onclick = () => {
+  const name = $('ctName').value.trim(), chat = $('ctChat').value.trim();
+  if (!name || !/^-?\d{5,20}$/.test(chat)) { toast('Informe nome e chat ID numérico', true); return; }
+  contacts.push({ name, chat }); store.set('contacts', contacts); $('ctName').value = ''; $('ctChat').value = ''; render();
+};
+
+// Tema e configuração
+$('theme').onclick = () => {
+  document.body.classList.toggle('dark');
+  $('theme').innerHTML = `<i class="fa fa-${document.body.classList.contains('dark') ? 'sun-o' : 'moon-o'}"></i>`;
+};
+$('openCfg').onclick = () => { $('token').value = store.get('token', ''); $('chat').value = store.get('chat', ''); $('modal').classList.add('show'); };
+$('closeCfg').onclick = () => $('modal').classList.remove('show');
+$('saveCfg').onclick = () => { store.set('token', $('token').value.trim()); store.set('chat', $('chat').value.trim()); $('modal').classList.remove('show'); toast('Configuração salva'); };
+
+render(); setStatus();
+</script>
+</body>
+</html>
